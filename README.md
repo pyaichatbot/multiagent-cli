@@ -81,7 +81,7 @@ CRDT-style append-only JSONL at `.multiagent_cli/wiki/events.jsonl`.
 
 Git merges of the JSONL file never conflict — lines concatenate.
 
-See `docs/architecture.md`, `docs/memory.md`, `docs/gaps.md`.
+See `docs/architecture.md` and `docs/memory.md`.
 
 ## evals
 
