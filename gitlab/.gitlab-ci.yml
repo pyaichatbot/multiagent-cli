@@ -1,0 +1,49 @@
+# Include from root .gitlab-ci.yml:
+#   include:
+#     - local: multiagent_cli/gitlab/.gitlab-ci.yml
+#
+# Requires CI variables:
+#   ANTHROPIC_API_KEY        — Claude auth
+#   GITLAB_TOKEN             — for MR API (or rely on CI_JOB_TOKEN)
+#   MULTIAGENT_DEBUG_JOBS    — comma list of job names eligible for auto-debug
+
+stages: [agent]
+
+.agent_base:
+  image: node:20-bookworm
+  stage: agent
+  before_script:
+    - apt-get update && apt-get install -y --no-install-recommends git curl jq python3 >/dev/null
+    - npm install -g @anthropic-ai/claude-code
+    - cp -r multiagent_cli/.claude .claude
+    - test -n "$ANTHROPIC_API_KEY" || { echo "ANTHROPIC_API_KEY is required"; exit 1; }
+  tags: [docker]
+
+agent_dev:
+  extends: .agent_base
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "trigger" && $AGENT_MODE == "dev"'
+  variables:
+    AGENT_BRANCH: "agent/dev-${CI_COMMIT_SHORT_SHA}"
+    AGENT_BASE: "${CI_DEFAULT_BRANCH}"
+  script:
+    - test -n "$AGENT_TASK" || { echo "AGENT_TASK is required"; exit 1; }
+    - git checkout -b "$AGENT_BRANCH"
+    - claude -p "/dev $AGENT_TASK" --dangerously-skip-permissions --output-format stream-json
+
+agent_debug:
+  extends: .agent_base
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "trigger" && $AGENT_MODE == "debug"'
+  variables:
+    AGENT_BRANCH: "${CI_MERGE_REQUEST_SOURCE_BRANCH_NAME}"
+    AGENT_BASE: "${CI_MERGE_REQUEST_TARGET_BRANCH_NAME}"
+  script:
+    - test -n "$AGENT_BRANCH" || { echo "no MR context"; exit 1; }
+    - test -n "$FAILED_JOB_NAME" || { echo "FAILED_JOB_NAME is required"; exit 1; }
+    - test -n "$FAILED_JOB_LOGS_B64" || { echo "FAILED_JOB_LOGS_B64 is required"; exit 1; }
+    - git fetch origin "$AGENT_BRANCH"
+    - git checkout "$AGENT_BRANCH"
+    - printf '%s' "$FAILED_JOB_LOGS_B64" | base64 --decode > .multiagent_failed_job.log
+    - export FAILED_JOB_LOGS_FILE=.multiagent_failed_job.log
+    - claude -p "/debug $FAILED_JOB_LOGS_FILE" --dangerously-skip-permissions --output-format stream-json

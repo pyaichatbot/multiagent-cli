@@ -1,0 +1,15 @@
+discovery:
+  roots:
+    - ../.claude/agents
+  globs:
+    - "**/*.md"
+  format: claude-md
+runtime:
+  runner: command-runner
+  command: node
+  args:
+    - ./example-runner.mjs
+outputs:
+  json: out/results.json
+  junit: out/results.junit.xml
+  html: out/report.html
